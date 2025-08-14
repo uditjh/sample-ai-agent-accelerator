@@ -1,0 +1,8 @@
+<div
+  class="conversation-item"
+  hx-get="/conversation/{{item.conversationId}}"
+  hx-target="#chat-content"
+>
+  <div class="conversation-preview">{{item.initial_question}}</div>
+  <div class="conversation-date">{{item.created}}</div>
+</div>

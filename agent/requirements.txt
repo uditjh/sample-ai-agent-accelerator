@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+pydantic
+httpx
+strands-agents
+strands-agents-tools
+bedrock-agentcore
+aws-opentelemetry-distro
+boto3

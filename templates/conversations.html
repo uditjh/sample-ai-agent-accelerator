@@ -1,0 +1,17 @@
+<div class="sidebar-header">
+  <h5 class="mb-0">💬 Chats</h5>
+  {% include "new.html" %}
+</div>
+
+<div class="conversation-list" id="conversation-list">
+  {% if chat_history %} {% for item in chat_history %} {% include
+  "conversation_item.html" with context %} {% endfor %} {% else %}
+  <div
+    class="text-center"
+    style="padding: 2rem 1rem; color: var(--text-secondary)"
+  >
+    <div style="font-size: 2rem; margin-bottom: 1rem">🗨️</div>
+    <p>No chats yet.<br />Start chatting to see your history here.</p>
+  </div>
+  {% endif %}
+</div>

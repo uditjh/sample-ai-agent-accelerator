@@ -1,0 +1,25 @@
+services:
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: jaeger
+    command: ["--collector.otlp.enabled=true"]
+    ports:
+      - "16686:16686"
+      - "4317:4317"
+      - "4318:4318"
+
+  agent:
+    build: .
+    platform: linux/arm64
+    ports:
+      - "8080:8080"
+    environment:
+      - "OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317"
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN}
+      - AWS_REGION=${AWS_REGION}
+      - APP_NAME=${APP_NAME}
+      - KNOWLEDGE_BASE_ID=${KNOWLEDGE_BASE_ID}
+      - MEMORY_ID=${MEMORY_ID}

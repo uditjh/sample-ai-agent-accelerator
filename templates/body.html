@@ -1,0 +1,33 @@
+<!-- Sidebar -->
+<div class="col-lg-4 col-md-5">
+  <div class="sidebar">
+    <div
+      id="conversations-container"
+      hx-get="/conversations"
+      hx-trigger="load"
+      hx-indicator="#conversations-loading"
+    >
+      <!-- Loading state shown initially -->
+      <div class="sidebar-header">
+        <h5 class="mb-0">💬 Chats</h5>
+        {% include "new.html" %}
+      </div>
+      <div id="conversations-loading" class="htmx-indicator">
+        <div class="spinner-container">
+          <div class="modern-spinner"></div>
+          <div class="ms-3">Loading...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Chat Area -->
+<div class="col-lg-8 col-md-7">
+  <div class="chat-container">
+    <div class="chat-header">
+      <h5>💬 Chat with AI Agent</h5>
+    </div>
+    <div id="chat-content">{% include "chat.html" with context %}</div>
+  </div>
+</div>

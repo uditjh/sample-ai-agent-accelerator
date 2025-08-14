@@ -1,0 +1,8 @@
+Flask
+boto3
+mistune
+psycopg[binary]
+gunicorn
+aws-opentelemetry-distro
+opentelemetry-instrumentation-psycopg
+bedrock-agentcore

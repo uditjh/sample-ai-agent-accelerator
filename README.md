@@ -10,6 +10,10 @@ This implementation evolved from the [AI Chat Accelerator implementation](https:
 
 *Note that at the time of this release (Aug 2025), the Bedrock AgentCore services are in preview.
 
+![ui](./ui.png)
+
+## Architecture
+
 ![architecture](./architecture.png)
 
 ## Key Features

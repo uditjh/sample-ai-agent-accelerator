@@ -1,6 +1,7 @@
 import logging
 import log
 import sys
+import os
 import signal
 from datetime import datetime, timezone
 from flask import Flask, request, render_template, abort
@@ -51,6 +52,32 @@ def after_request(response):
     return response
 
 
+# Validate required environment variables at startup
+def validate_environment():
+    """Validate that all required environment variables are set"""
+    required_vars = {
+        'AGENT_RUNTIME': os.getenv('AGENT_RUNTIME'),
+        'AWS_REGION': os.getenv('AWS_REGION'),
+        'MEMORY_ID': os.getenv('MEMORY_ID')
+    }
+    
+    missing_vars = [var for var, value in required_vars.items() if not value]
+    
+    if missing_vars:
+        error_msg = f"Missing required environment variables: {', '.join(missing_vars)}"
+        logging.error(error_msg)
+        logging.error("Please set the following environment variables:")
+        for var in missing_vars:
+            logging.error(f"  export {var}=<value>")
+        raise Exception(error_msg)
+    
+    logging.info("Environment validation passed")
+    for var, value in required_vars.items():
+        logging.info(f"  {var}: {value[:20]}..." if len(value) > 20 else f"  {var}: {value}")
+
+# Validate environment before initializing services
+validate_environment()
+
 # initialize database client
 db = database.Database()
 
@@ -75,7 +102,8 @@ def health_check():
 def get_current_user_id():
     """get the currently logged in user"""
     # TODO: get current user id from auth
-    return "1"
+    # Using a valid actorId format that meets bedrock-agentcore requirements
+    return "user-1"
 
 
 def get_chat_history(user_id):
@@ -110,88 +138,112 @@ def conversations():
 @app.route("/ask", methods=["POST"])
 def ask():
     """POST /ask adds a new Q&A to the conversation"""
+    
+    try:
+        # get conversation id and question from form
+        if "conversation_id" not in request.values:
+            m = "missing required form data: conversation_id"
+            logging.error(m)
+            abort(400, m)
+        id = request.values["conversation_id"]
+        logging.info(f"conversation id: {id}")
 
-    # get conversation id and question from form
-    if "conversation_id" not in request.values:
-        m = "missing required form data: conversation_id"
-        logging.error(m)
-        abort(400, m)
-    id = request.values["conversation_id"]
-    logging.info(f"conversation id: {id}")
+        if "question" not in request.values:
+            m = "missing required form data: question"
+            logging.error(m)
+            abort(400, m)
+        question = request.values["question"]
+        question = question.rstrip()
+        logging.info(f"question: {question}")
+        logging.info(f"id: {id}")
 
-    if "question" not in request.values:
-        m = "missing required form data: question"
-        logging.error(m)
-        abort(400, m)
-    question = request.values["question"]
-    question = question.rstrip()
-    logging.info(f"question: {question}")
-    logging.info(f"id: {id}")
+        user_id = get_current_user_id()
+        logging.info(f"user_id: {user_id}")
 
-    user_id = get_current_user_id()
+        is_new_conversation = (id == "")
+        if is_new_conversation:
+            id = str(uuid.uuid4())
+            logging.info(f"created new conversation id: {id}")
 
-    is_new_conversation = (id == "")
-    if is_new_conversation:
-        id = str(uuid.uuid4())
-
-    conversation = {
-        "conversationId": id,
-        "userId": user_id,
-        "questions": [],
-    }
-
-    _, conversation, sources = ask_internal(conversation, question)
-
-    # Only render the chat content, not the entire body
-    response = render_template("chat.html",
-                               conversation=conversation,
-                               sources=sources)
-
-    # If this is a new conversation, also update the conversation history
-    if is_new_conversation:
-
-        utc_datetime = datetime.now(timezone.utc)
-        local_datetime = utc_datetime.astimezone()
-
-        # Manual 12-hour format conversion
-        hour = local_datetime.hour
-        am_pm = "AM" if hour < 12 else "PM"
-        hour_12 = hour if hour == 0 or hour == 12 else hour % 12
-        if hour_12 == 0:
-            hour_12 = 12
-
-        current_datetime = f"{local_datetime.month}/{local_datetime.day}/{local_datetime.year} {hour_12}:{local_datetime.minute:02d} {am_pm}"
-
-        new_history_item = {
+        conversation = {
             "conversationId": id,
-            "initial_question": question,
-            "created": current_datetime,
+            "userId": user_id,
+            "questions": [],
         }
-        conversation_item = render_template(
-            "conversation_item.html", item=new_history_item)
 
-        # Use out-of-band swap to prepend to conversation list
-        response += f'<div hx-swap-oob="afterbegin:#conversation-list">{conversation_item}</div>'
+        logging.info("calling ask_internal...")
+        _, conversation, sources = ask_internal(conversation, question)
+        logging.info("ask_internal completed successfully")
 
-    return response
+        # Only render the chat content, not the entire body
+        response = render_template("chat.html",
+                                   conversation=conversation,
+                                   sources=sources)
+
+        # If this is a new conversation, also update the conversation history
+        if is_new_conversation:
+
+            utc_datetime = datetime.now(timezone.utc)
+            local_datetime = utc_datetime.astimezone()
+
+            # Manual 12-hour format conversion
+            hour = local_datetime.hour
+            am_pm = "AM" if hour < 12 else "PM"
+            hour_12 = hour if hour == 0 or hour == 12 else hour % 12
+            if hour_12 == 0:
+                hour_12 = 12
+
+            current_datetime = f"{local_datetime.month}/{local_datetime.day}/{local_datetime.year} {hour_12}:{local_datetime.minute:02d} {am_pm}"
+
+            new_history_item = {
+                "conversationId": id,
+                "initial_question": question,
+                "created": current_datetime,
+            }
+            conversation_item = render_template(
+                "conversation_item.html", item=new_history_item)
+
+            # Use out-of-band swap to prepend to conversation list
+            response += f'<div hx-swap-oob="afterbegin:#conversation-list">{conversation_item}</div>'
+
+        return response
+        
+    except Exception as e:
+        logging.error(f"Error in /ask endpoint: {str(e)}")
+        logging.error(f"Exception type: {type(e).__name__}")
+        import traceback
+        logging.error(f"Traceback: {traceback.format_exc()}")
+        abort(500, f"Internal server error: {str(e)}")
 
 
 def ask_internal(conversation, question):
     """
     core ask implementation shared by app and api.
     """
+    
+    try:
+        logging.info("Starting orchestrator.orchestrate...")
+        # RAG orchestration to get answer
+        answer, sources = orchestrator.orchestrate(conversation, question)
+        logging.info(f"Orchestrator completed. Answer length: {len(answer) if answer else 0}")
 
-    # RAG orchestration to get answer
-    answer, sources = orchestrator.orchestrate(conversation, question)
+        conversation_id = conversation["conversationId"]
+        user_id = conversation["userId"]
+        logging.info(f"Fetching conversation from database: {conversation_id}")
 
-    conversation_id = conversation["conversationId"]
-    user_id = conversation["userId"]
+        # fetch latest conversation
+        conversation = db.get(conversation_id, user_id)
+        logging.info(f"Database fetch completed. Questions count: {len(conversation.get('questions', []))}")
+        sources = []
 
-    # fetch latest conversation
-    conversation = db.get(conversation_id, user_id)
-    sources = []
-
-    return answer, conversation, sources
+        return answer, conversation, sources
+        
+    except Exception as e:
+        logging.error(f"Error in ask_internal: {str(e)}")
+        logging.error(f"Exception type: {type(e).__name__}")
+        import traceback
+        logging.error(f"Traceback: {traceback.format_exc()}")
+        raise
 
 
 if __name__ == '__main__':

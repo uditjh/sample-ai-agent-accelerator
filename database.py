@@ -18,9 +18,29 @@ class Database():
     def get(self, conversation_id, user_id):
         """fetch a conversation by id and user"""
 
-        events = memory_client.list_events(memory_id, user_id, conversation_id)
-        logging.info(f"found {len(events)} events")
-        log.info(events)
+        try:
+            logging.info(f"Checking memory_id: {memory_id}")
+            if not memory_id:
+                raise Exception("MEMORY_ID environment variable is not set")
+                
+            logging.info(f"Fetching events for conversation_id: {conversation_id}, user_id: {user_id}")
+            events = memory_client.list_events(memory_id, user_id, conversation_id)
+            logging.info(f"found {len(events)} events")
+            log.info(events)
+        except Exception as e:
+            # Handle the case where the actor or session doesn't exist yet (new user/conversation)
+            if ("ResourceNotFoundException" in str(type(e).__name__) or 
+                "ValidationException" in str(type(e).__name__)) and (
+                "Actor" in str(e) and "not found" in str(e) or
+                "Session" in str(e) and "not found" in str(e)):
+                logging.info(f"Actor {user_id} or session {conversation_id} not found - this is expected for new users/conversations")
+                events = []  # Return empty events list for new users/conversations
+            else:
+                logging.error(f"Error fetching events from memory client: {str(e)}")
+                logging.error(f"Exception type: {type(e).__name__}")
+                import traceback
+                logging.error(f"Traceback: {traceback.format_exc()}")
+                raise
 
         # translate list of events into a conversation with question/answer groupings
         # iterate the list of events backwards
@@ -77,12 +97,26 @@ class Database():
         """fetch a list of conversations by user, sorted by latest activity"""
 
         try:
+            logging.info(f"Listing sessions for user_id: {user_id}, memory_id: {memory_id}")
+            if not memory_id:
+                raise Exception("MEMORY_ID environment variable is not set")
+                
             response = memory_data_client.list_sessions(
                 memoryId=memory_id,
                 actorId=user_id,
             )
-        except:
-            return []
+            logging.info(f"Successfully retrieved sessions response")
+        except Exception as e:
+            # Handle the case where the actor doesn't exist yet (new user)
+            if "ResourceNotFoundException" in str(type(e).__name__) and "Actor" in str(e) and "not found" in str(e):
+                logging.info(f"Actor {user_id} not found - this is expected for new users")
+                return []
+            else:
+                logging.error(f"Error listing sessions: {str(e)}")
+                logging.error(f"Exception type: {type(e).__name__}")
+                import traceback
+                logging.error(f"Traceback: {traceback.format_exc()}")
+                return []
 
         sessions_with_events = []
         logging.info(

@@ -5,7 +5,8 @@ from pydantic import BaseModel
 from typing import Dict, Any
 from datetime import datetime
 from strands import Agent
-from strands_tools import retrieve
+import boto3
+from strands import tool
 from memoryhook import MemoryHookProvider
 from bedrock_agentcore.memory import MemoryClient
 
@@ -41,6 +42,55 @@ logging.warning(f"MEMORY_ID = {memory_id}")
 # even though AWS_REGION is set
 # https://github.com/aws/bedrock-agentcore-sdk-python/blob/main/src/bedrock_agentcore/memory/client.py#L43
 memory_client = MemoryClient(region_name=region)
+
+# Initialize Bedrock Agent Runtime client for knowledge base retrieval
+bedrock_agent_runtime = boto3.client('bedrock-agent-runtime', region_name=region)
+
+@tool
+def retrieve(query: str) -> str:
+    """
+    Retrieve relevant information from the knowledge base based on the user's query.
+    
+    Args:
+        query: The search query to find relevant information
+        
+    Returns:
+        Relevant information from the knowledge base
+    """
+    try:
+        logging.info(f"Retrieving information for query: {query}")
+        
+        response = bedrock_agent_runtime.retrieve(
+            knowledgeBaseId=kb_id,
+            retrievalQuery={
+                'text': query
+            },
+            retrievalConfiguration={
+                'vectorSearchConfiguration': {
+                    'numberOfResults': 5
+                }
+            }
+        )
+        
+        # Extract and combine the retrieved text chunks
+        retrieved_texts = []
+        for result in response.get('retrievalResults', []):
+            content = result.get('content', {})
+            text = content.get('text', '')
+            if text:
+                retrieved_texts.append(text)
+        
+        if retrieved_texts:
+            combined_text = '\n\n'.join(retrieved_texts)
+            logging.info(f"Retrieved {len(retrieved_texts)} text chunks")
+            return combined_text
+        else:
+            logging.warning("No relevant information found in knowledge base")
+            return "No relevant information found in the knowledge base for this query."
+            
+    except Exception as e:
+        logging.error(f"Error retrieving from knowledge base: {str(e)}")
+        return f"Error retrieving information: {str(e)}"
 
 app = FastAPI(title="AI Chat Accelerator Agent", version="1.0.0")
 
